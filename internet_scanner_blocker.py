@@ -123,6 +123,17 @@ def atomic_text(path, data):
     os.replace(temporary, path)
 
 
+def apply_script(contents):
+    with tempfile.NamedTemporaryFile("w", suffix=".nft", delete=False) as out:
+        out.write(contents)
+        script = Path(out.name)
+    try:
+        run(["nft", "-c", "-f", str(script)])
+        run(["nft", "-f", str(script)])
+    finally:
+        script.unlink(missing_ok=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="/etc/internet-scanner-blocker.json")
@@ -138,15 +149,25 @@ def main():
     with context as lock:
         if lock is not None:
             fcntl.flock(lock, fcntl.LOCK_EX)
-        with tempfile.TemporaryDirectory() as temp:
-            repo = args.from_dir
-            if repo is None:
-                repo = Path(temp) / "upstream"
-                run(["git", "clone", "--depth", "1", "--quiet", config["upstream"], str(repo)], timeout=120)
-            commit = run(["git", "-C", str(repo), "rev-parse", "HEAD"]).stdout.strip()
-            networks, rows, files = collect(repo)
         previous_path = state / "last-applied.json"
         previous = json.loads(previous_path.read_text()) if previous_path.exists() else None
+        try:
+            with tempfile.TemporaryDirectory() as temp:
+                repo = args.from_dir
+                if repo is None:
+                    repo = Path(temp) / "upstream"
+                    run(["git", "clone", "--depth", "1", "--quiet", config["upstream"], str(repo)], timeout=120)
+                commit = run(["git", "-C", str(repo), "rev-parse", "HEAD"]).stdout.strip()
+                networks, rows, files = collect(repo)
+        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
+            cached = state / "active.nft"
+            if not args.apply or args.from_dir or not previous or not cached.exists():
+                raise
+            if not table_exists():
+                apply_script(cached.read_text())
+                print("restored last known good blocklist", file=sys.stderr)
+            print(f"upstream unavailable; retained cached blocklist: {exc}", file=sys.stderr)
+            return
         current = set(networks[4] + networks[6])
         old = set(previous["v4"] + previous["v6"]) if previous else set()
         added, removed = current - old, old - current
@@ -163,14 +184,7 @@ def main():
             print("remove sample:", ", ".join(sorted(removed)[:5]))
             print("dry run; no firewall changes")
             return
-        with tempfile.NamedTemporaryFile("w", suffix=".nft", delete=False) as out:
-            out.write(nft_text)
-            script = Path(out.name)
-        try:
-            run(["nft", "-c", "-f", str(script)])
-            run(["nft", "-f", str(script)])
-        finally:
-            script.unlink(missing_ok=True)
+        apply_script(nft_text)
         atomic_text(state / "active.nft", render(networks, config["interfaces"], replace=False))
         snapshot(previous_path, {"commit": commit, "v4": networks[4], "v6": networks[6], "interfaces": config["interfaces"]})
         print("applied")
@@ -179,6 +193,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (ValueError, RuntimeError, subprocess.CalledProcessError, OSError) as exc:
+    except (ValueError, RuntimeError, subprocess.TimeoutExpired, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(1)

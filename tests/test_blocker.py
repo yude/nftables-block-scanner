@@ -2,8 +2,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from internet_scanner_blocker import collect, load_config, render
+from internet_scanner_blocker import collect, load_config, main, render
 
 
 class BlockerTests(unittest.TestCase):
@@ -36,6 +37,27 @@ class BlockerTests(unittest.TestCase):
             }))
             with self.assertRaises(ValueError):
                 load_config(path)
+
+    def test_restores_cached_rules_when_upstream_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state = Path(temp) / "state"
+            state.mkdir()
+            (state / "active.nft").write_text("add table inet internet_scanner_blocker\n")
+            (state / "last-applied.json").write_text(json.dumps({
+                "commit": "old", "v4": ["8.8.8.8/32"], "v6": [], "interfaces": ["eth0"]
+            }))
+            config = Path(temp) / "config.json"
+            config.write_text(json.dumps({
+                "interfaces": ["eth0"], "state_dir": str(state),
+                "upstream": "https://github.com/OpenFilters/internet-scanners.git",
+                "max_change_percent": 25,
+            }))
+            with patch("sys.argv", ["blocker", "--config", str(config), "--apply"]), \
+                 patch("internet_scanner_blocker.run", side_effect=RuntimeError("offline")), \
+                 patch("internet_scanner_blocker.table_exists", return_value=False), \
+                 patch("internet_scanner_blocker.apply_script") as apply:
+                main()
+                apply.assert_called_once_with("add table inet internet_scanner_blocker\n")
 
 
 if __name__ == "__main__":

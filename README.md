@@ -9,7 +9,7 @@
 - HTTPS で上流を shallow clone し、CIDR ファイル名、件数、IP の種類、公開アドレス、最小プレフィックス長を検証します。ホストビットの付いた CIDR は正規化します。
 - 重複・包含・隣接範囲を統合し、直前に適用した一覧と比較します。変更が大きいと自動適用を止めます。
 - 専用の `inet internet_scanner_blocker` テーブルだけを nftables の単一バッチで置き換えます。`prerouting` の priority `-150` で判定するため、Docker の公開ポートの DNAT より前に遮断できます。明示したインターフェースからの入力だけに適用します。
-- 取得または検証に失敗すると、稼働中のフィルターを変更しません。最後に正常適用した一覧と nftables スクリプトを `state_dir` に保存します。
+- 取得または検証に失敗すると、稼働中のフィルターを変更しません。再起動直後で専用テーブルがない場合は、最後に正常適用した一覧を `state_dir` から復元します。
 
 ## 事前確認
 
@@ -23,7 +23,7 @@
 4. 初回だけ `sudo /usr/local/libexec/internet-scanner-blocker --apply` を実行し、`sudo nft list table inet internet_scanner_blocker` でルールと入力インターフェースを確認します。Docker 公開ポート、ホストの公開サービス、Tailscale の疎通を実際に試してください。
 5. `systemd/` の 2 ファイルを `/etc/systemd/system/` にコピーし、`systemctl daemon-reload && systemctl enable --now internet-scanner-blocker.service internet-scanner-blocker.timer` を実行します。起動時と約 6 時間ごとに更新します。
 
-このホストの `/etc/nftables.conf` は先頭で `flush ruleset` を実行します。**再起動・`nftables.service` 再読込直後にも遮断を維持したい場合**、初回の正常適用後に `/etc/nftables.conf` の末尾へ次の行を追加してください。ファイルの存在を確認し、`nft -c -f /etc/nftables.conf` で検証してから再読込します。更新時には `active.nft` が原子的に置き換わります。
+`systemd` のサービスが起動時に適用し、上流へ接続できなくても最後に正常適用したリストを復元します。このホストの `/etc/nftables.conf` は先頭で `flush ruleset` を実行します。**`nftables.service` を手動再読込した直後にも遮断を維持したい場合**、初回の正常適用後に `/etc/nftables.conf` の末尾へ次の行を追加してください。ファイルの存在を確認し、`nft -c -f /etc/nftables.conf` で検証してから再読込します。更新時には `active.nft` が原子的に置き換わります。
 
 ```nft
 include "/var/lib/internet-scanner-blocker/active.nft"
