@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from internet_scanner_blocker import collect, load_config, main, render
+from nftables_block_scanner import collect, load_config, main, render
 
 
 class BlockerTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class BlockerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             state = Path(temp) / "state"
             state.mkdir()
-            (state / "active.nft").write_text("add table inet internet_scanner_blocker\n")
+            (state / "active.nft").write_text("add table inet nftables_block_scanner\n")
             (state / "last-applied.json").write_text(json.dumps({
                 "commit": "old", "v4": ["8.8.8.8/32"], "v6": [], "interfaces": ["eth0"]
             }))
@@ -53,11 +53,11 @@ class BlockerTests(unittest.TestCase):
                 "max_change_percent": 25,
             }))
             with patch("sys.argv", ["blocker", "--config", str(config), "--apply"]), \
-                 patch("internet_scanner_blocker.run", side_effect=RuntimeError("offline")), \
-                 patch("internet_scanner_blocker.table_exists", return_value=False), \
-                 patch("internet_scanner_blocker.apply_script") as apply:
+                 patch("nftables_block_scanner.run", side_effect=RuntimeError("offline")), \
+                 patch("nftables_block_scanner.table_exists", return_value=False), \
+                 patch("nftables_block_scanner.apply_script") as apply:
                 main()
-                apply.assert_called_once_with("add table inet internet_scanner_blocker\n")
+                apply.assert_called_once_with("add table inet nftables_block_scanner\n")
 
 
 if __name__ == "__main__":

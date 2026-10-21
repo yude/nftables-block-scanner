@@ -13,7 +13,7 @@ import subprocess
 import sys
 import tempfile
 
-TABLE = "internet_scanner_blocker"
+TABLE = "nftables_block_scanner"
 NAME = re.compile(r"^[a-zA-Z0-9_.:-]{1,15}$")
 FILE = re.compile(r"^[a-z0-9]+_v[46]\.txt$")
 
@@ -136,7 +136,7 @@ def apply_script(contents):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", default="/etc/internet-scanner-blocker.json")
+    parser.add_argument("--config", default="/etc/nftables-block-scanner.json")
     parser.add_argument("--apply", action="store_true", help="apply to the local nftables ruleset")
     parser.add_argument("--accept-large-change", action="store_true", help="override the CIDR change guard")
     parser.add_argument("--from-dir", type=Path, help="use an existing checkout for offline review")
