@@ -1,0 +1,6 @@
+{
+  "interfaces": ["eth0"],
+  "state_dir": "/var/lib/internet-scanner-blocker",
+  "upstream": "https://github.com/OpenFilters/internet-scanners.git",
+  "max_change_percent": 25
+}

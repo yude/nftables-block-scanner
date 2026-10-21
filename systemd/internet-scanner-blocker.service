@@ -1,0 +1,11 @@
+[Unit]
+Description=Update internet scanner nftables blocklist
+Wants=network-online.target
+After=network-online.target nftables.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/internet-scanner-blocker --apply
+
+[Install]
+WantedBy=multi-user.target

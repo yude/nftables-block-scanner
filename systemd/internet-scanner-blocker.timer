@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodically update internet scanner blocklist
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+RandomizedDelaySec=15min
+Persistent=true
+Unit=internet-scanner-blocker.service
+
+[Install]
+WantedBy=timers.target
