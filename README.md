@@ -11,6 +11,12 @@
 - 専用の `inet internet_scanner_blocker` テーブルだけを nftables の単一バッチで置き換えます。`prerouting` の priority `-150` で判定するため、Docker の公開ポートの DNAT より前に遮断できます。明示したインターフェースからの入力だけに適用します。
 - 取得または検証に失敗すると、稼働中のフィルターを変更しません。再起動直後で専用テーブルがない場合は、最後に正常適用した一覧を `state_dir` から復元します。
 
+## 遮断範囲
+
+- `interfaces` に指定したインターフェースから入るパケットの**送信元 IP**がリストの CIDR に含まれる場合、宛先ポートやプロトコルを問わず `drop` します。ホスト上のサービスに加え、Docker の公開ポート宛ても対象です。
+- `tailscale0` や Docker ブリッジから入るパケットは対象外です。ただし、Tailscale の暗号化された外側の通信が指定インターフェースへ到着し、その送信元 IP がリストに含まれる場合、その通信は遮断されます。
+- ロードバランサーやプロキシで送信元 IP が書き換わる場合は、ホストで実際に見える送信元 IP で判定します。リストにない送信元からの通信は、このツールでは遮断しません。
+
 ## 事前確認
 
 `ip -brief link` と `ip route get 1.1.1.1` などで OCI の外部入力インターフェースを特定してください。**`tailscale0`、`docker0`、`br-*`、`veth*` は指定できません。** ホストに複数の外部インターフェースがある場合、実際に到達するものだけ指定します。リポジトリには調査・測定組織も含まれるため、遮断するとその組織からの正当なアクセスも失われます。
@@ -23,7 +29,7 @@
 4. 初回だけ `sudo /usr/local/libexec/internet-scanner-blocker --apply` を実行し、`sudo nft list table inet internet_scanner_blocker` でルールと入力インターフェースを確認します。Docker 公開ポート、ホストの公開サービス、Tailscale の疎通を実際に試してください。
 5. `systemd/` の 2 ファイルを `/etc/systemd/system/` にコピーし、`systemctl daemon-reload && systemctl enable --now internet-scanner-blocker.service internet-scanner-blocker.timer` を実行します。起動時と約 6 時間ごとに更新します。
 
-`systemd` のサービスが起動時に適用し、上流へ接続できなくても最後に正常適用したリストを復元します。このホストの `/etc/nftables.conf` は先頭で `flush ruleset` を実行します。**`nftables.service` を手動再読込した直後にも遮断を維持したい場合**、初回の正常適用後に `/etc/nftables.conf` の末尾へ次の行を追加してください。ファイルの存在を確認し、`nft -c -f /etc/nftables.conf` で検証してから再読込します。更新時には `active.nft` が原子的に置き換わります。
+`systemd` のサービスが起動時に適用し、上流へ接続できなくても最後に正常適用したリストを復元します。`/etc/nftables.conf` が `flush ruleset` を実行するホストで、**`nftables.service` を手動再読込した直後にも遮断を維持したい場合**、初回の正常適用後に `/etc/nftables.conf` の末尾へ次の行を追加してください。ファイルの存在を確認し、`nft -c -f /etc/nftables.conf` で検証してから再読込します。更新時には `active.nft` が原子的に置き換わります。
 
 ```nft
 include "/var/lib/internet-scanner-blocker/active.nft"
