@@ -1,4 +1,4 @@
-# block-scanner-systemd
+# nftables-block-scanner
 
 [OpenFilters/internet-scanners](https://github.com/OpenFilters/internet-scanners) の `cidr/` を取得し、公開インターフェースから来る送信元 IP を nftables で遮断するツールです。Docker と Tailscale が作るテーブルやチェーンは変更しません。Python 3、Git、nftables、systemd を使用します。
 
